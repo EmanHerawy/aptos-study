@@ -1,5 +1,28 @@
 # Move Security Guidelines - Study Notes
-
+## some info based on wokring with code 
+- In Move, you can only return references that are derived from function parameters, not from global storage. This is a safety mechanism to prevent dangling references and ensure memory safety. 
+example : 
+``` move 
+/*
+error: cannot return a reference derived from struct `aptos_fighters::Game` since it is not based on a parameter
+    ┌─ C:\Users\EmanELHerawy\out\aptos-study-notes\demos\aptos_fighters\sources\aptos_fighters.move:479:9
+    │
+478 │         let game = borrow_global_mut<Game>(signer::address_of(&resource_signer));
+    │                    ------------------------------------------------------------- struct `aptos_fighters::Game` previously mutably borrowed here
+479 │         game
+    │         ^^^^ return attempted here
+*/
+fun get_game_mut():&mut Game acquires ModuleData, Game {
+    let module_addr = @aptos_fighters_address;
+    
+    // Get the resource signer using the stored capability
+    let module_data = borrow_global<ModuleData>(module_addr);
+    let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
+    
+    let game = borrow_global_mut<Game>(signer::address_of(&resource_signer));
+    game
+}
+```
 ## Access Control
 
 ### Object Ownership Check

@@ -109,6 +109,14 @@ module aptos_fighters_address::aptos_fighters {
         is_winner: bool,
     }
 
+    /// Modifiers 
+    // onlyPlayers 
+
+    fun only_players(player1:address,player2:address,caller:address){
+            assert!(player1 == caller || player2 == caller, 
+            error::invalid_argument(ENOT_AUTHORIZED));
+    }
+
     /// Initialize the module
     fun init_module(deployer: &signer) {
         let seed = b"aptos_fighters";
@@ -250,8 +258,7 @@ module aptos_fighters_address::aptos_fighters {
         let player_add = signer::address_of(player);
         
         // Check player is authorized
-        assert!(game.player1 == player_add || game.player2 == player_add, 
-            error::invalid_argument(ENOT_AUTHORIZED));
+        only_players(game.player1, game.player2,player_add);
         
         // Check game hasn't ended
         assert!(timestamp::now_seconds() < game.game_rules.game_start_time + game.game_rules.game_duration, 
@@ -294,8 +301,8 @@ module aptos_fighters_address::aptos_fighters {
         let player_add = signer::address_of(player);
         
         // Check player is authorized
-        assert!(game.player1 == player_add || game.player2 == player_add, 
-            error::invalid_argument(ENOT_AUTHORIZED));
+             only_players(game.player1, game.player2,player_add);
+
         
         // Check game hasn't ended
         assert!(timestamp::now_seconds() < game.game_rules.game_start_time + game.game_rules.game_duration, 
@@ -333,13 +340,19 @@ module aptos_fighters_address::aptos_fighters {
     }
 
     /// Withdraw staked tokens and rewards if applicable
-    public entry fun withdraw(player: &signer, deployer: address) acquires Game, ModuleData {
-        let game = borrow_global_mut<Game>(get_game_address(deployer, 1));
+    public entry fun withdraw(player: &signer) acquires Game, ModuleData {
+        let module_addr = @aptos_fighters_address;
+        
+        // Get the resource signer using the stored capability
+        let module_data = borrow_global<ModuleData>(module_addr);
+        let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
+        
+        let game = borrow_global_mut<Game>(signer::address_of(&resource_signer));
         let player_add = signer::address_of(player);
         
         // Check player is authorized
-        assert!(game.player1 == player_add || game.player2 == player_add, 
-            error::invalid_argument(ENOT_AUTHORIZED));
+              only_players(game.player1, game.player2,player_add);
+
         
         // Check game has ended
         assert!(timestamp::now_seconds() > game.game_rules.game_start_time + game.game_rules.game_duration, 
@@ -462,7 +475,35 @@ fun fetch_price(asset_price_identifier : vector<u8>) :  Price{
             (player2, player2_total_val)
         }
     }
-
+    // fun get_game_mut():&mut Game acquires ModuleData, Game{
+    //     let module_addr = @aptos_fighters_address;
+        
+    //     // Get the resource signer using the stored capability
+    //     let module_data = borrow_global<ModuleData>(module_addr);
+    //     let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
+        
+    //     let game = borrow_global_mut<Game>(signer::address_of(&resource_signer));
+    //     game
+    // }
+    fun get_resource_add():address acquires ModuleData{
+        let module_addr = @aptos_fighters_address;
+        
+        // Get the resource signer using the stored capability
+        let module_data = borrow_global<ModuleData>(module_addr);
+        let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
+        
+        signer::address_of(&resource_signer)
+    }
+    fun get_resource_Signer():signer acquires ModuleData{
+            let module_addr = @aptos_fighters_address;
+        
+        // Get the resource signer using the stored capability
+        let module_data = borrow_global<ModuleData>(module_addr);
+        let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
+        resource_signer
+        
+    }
+    
     /// Get asset balance for a user (read-only)
     public fun get_user_asset_balance(
         asset_balances: &vector<AssetBalance>,
