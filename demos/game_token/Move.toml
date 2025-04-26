@@ -1,13 +1,13 @@
 [package]
-name = "HelloBlockchainExample"
+name = "GameToken"
 version = "1.0.0"
 authors = []
 
 [addresses]
-hello_blockchain = "_"
+game_token = "_"
 
 [dev-addresses]
-
+game_token = "0x45"
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-framework.git"
 rev = "mainnet"

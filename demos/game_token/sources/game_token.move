@@ -1,4 +1,4 @@
-module hello_blockchain::message {
+module game_token::message {
     use std::error;
     use std::signer;
     use std::string;
