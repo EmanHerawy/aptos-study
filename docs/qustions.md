@@ -17,6 +17,38 @@ This document should have list of questions i have during my learning journey
  - what are the tools u recommend to use for testing , dev and audit ?
  - i got some wired issue with error code , although it was correctly implemented , wondering why  i got different error code that the one i defined , check reedme for ref to the error 
  
+- How can I implement a secure  transaction in an Aptos dApp that requires authorization from two distinct signers? Specifically, I want to call a function like the mint_two example below, which expects both a sender and a recipient signer. What are the security implications of this pattern, and what safeguards should I implement in both the Move module and client application?
+```move
+module 0x42::example {
+  #[resource_group(scope = global)]
+  struct ObjectGroup { }
+ 
+  #[resource_group_member(group = 0x42::example::ObjectGroup)]
+  struct Monkey has store, key { }
+ 
+  #[resource_group_member(group = 0x42::example::ObjectGroup)]
+  struct Toad has store, key { }
+ 
+  fun mint_two(sender: &signer, recipient: &signer) {
+    let sender_address = signer::address_of(sender);
+ 
+    let constructor_ref_monkey = &object::create_object(sender_address);
+    let constructor_ref_toad = &object::create_object(sender_address);
+    let object_signer_monkey = object::generate_signer(&constructor_ref_monkey);
+    let object_signer_toad = object::generate_signer(&constructor_ref_toad);
+ 
+    move_to(object_signer_monkey, Monkey{});
+    move_to(object_signer_toad, Toad{});
+ 
+    let object_address_monkey = signer::address_of(&object_signer_monkey);
+ 
+    let monkey_object: Object<Monkey> = object::address_to_object<Monkey>(object_address_monkey);
+    object::transfer<Monkey>(sender, monkey_object, signer::address_of(recipient));
+  }
+}
+
+
+```
 
 - transfer from contract address 
 here's what i get from ai , wondering if there's another way 
@@ -97,37 +129,3 @@ public entry fun claim_reward(
 ```
 
 This approach uses a resource account pattern which is a common approach in Aptos for modules that need to manage assets. The resource account acts as a separate account controlled by your module, and the SignerCapability allows your module to authorize transactions on behalf of that account.
-
-```
--How can I implement a secure  transaction in an Aptos dApp that requires authorization from two distinct signers? Specifically, I want to call a function like the mint_two example below, which expects both a sender and a recipient signer. What are the security implications of this pattern, and what safeguards should I implement in both the Move module and client application?
-```move
-module 0x42::example {
-  #[resource_group(scope = global)]
-  struct ObjectGroup { }
- 
-  #[resource_group_member(group = 0x42::example::ObjectGroup)]
-  struct Monkey has store, key { }
- 
-  #[resource_group_member(group = 0x42::example::ObjectGroup)]
-  struct Toad has store, key { }
- 
-  fun mint_two(sender: &signer, recipient: &signer) {
-    let sender_address = signer::address_of(sender);
- 
-    let constructor_ref_monkey = &object::create_object(sender_address);
-    let constructor_ref_toad = &object::create_object(sender_address);
-    let object_signer_monkey = object::generate_signer(&constructor_ref_monkey);
-    let object_signer_toad = object::generate_signer(&constructor_ref_toad);
- 
-    move_to(object_signer_monkey, Monkey{});
-    move_to(object_signer_toad, Toad{});
- 
-    let object_address_monkey = signer::address_of(&object_signer_monkey);
- 
-    let monkey_object: Object<Monkey> = object::address_to_object<Monkey>(object_address_monkey);
-    object::transfer<Monkey>(sender, monkey_object, signer::address_of(recipient));
-  }
-}
-
-
-```
