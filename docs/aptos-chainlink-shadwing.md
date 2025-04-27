@@ -123,7 +123,7 @@ This distinction is important for building robust applications on Aptos, as it a
 ## Events
 
 - Why are they defining events that way? `allowlist_add_events: EventHandle<AllowlistAdd>` and had to create and destroy although they define it with `#[event]` and `struct` which has `drop`? Why do they do it like this?
-
+` I guess it is because they are creating new allowlest per each role, so they want to have event for each as well 
 > Here's Claude's answer:
 
 Great question about the different approaches to events in Aptos!
