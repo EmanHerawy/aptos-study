@@ -1,6 +1,4 @@
 module game_token::access_control {
-    use std::error;
-    use std::signer;
     use std::string::String;
     use std::account;
     use std::event::{Self, EventHandle};
