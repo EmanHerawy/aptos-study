@@ -7,7 +7,9 @@ This document should have list of questions i have during my learning journey
 - In the tutorial mentioned 
 > When we create the Dutch auction Object, we include a TransferRef to let us transfer the NFT without requiring the original owner’s signature. This is especially helpful for finalizing a sale when a bid is placed.
 
-    - if i'm a malicious dev, i can develop my contract that way and transfer user's tokens without their permission ??
+ - if i'm a malicious dev, i can develop my contract that way and transfer user's tokens without their permission ??
+    - Answer from Aptos team during token2049 : 
+        - yes, in this way you are giving full authorization to the contract to amage the asset. `You as dev can add functionality to revoke this, maybe` as they said
 
 ## Wondering why/how
  - how can do fork testing? 
@@ -49,6 +51,8 @@ module 0x42::example {
 
 
 ```
+- Anser from Aptos team during token2049
+    - it's cold multi agent transaction : https://aptos.dev/en/build/sdks/ts-sdk/building-transactions/multi-agent-transactions
 
 - transfer from contract address 
 here's what i get from ai , wondering if there's another way 
