@@ -392,20 +392,95 @@ public fun create_token_with_hooks(creator: &signer) {
 
 ## Store Management
 
-### Primary vs Secondary Stores
+# Understanding Secondary Stores in Aptos Fungible Assets
 
-**Primary Store**
-- One non-deletable store per FA type per account
-- Deterministic address derived from account and metadata
-- Created automatically when FA is deposited
-- Lookup: `primary_store<T: key>(owner, metadata)`
+Secondary stores are an advanced feature of the Aptos Fungible Asset standard that provide more flexibility in managing token balances. Let me explain them in detail:
 
-**Secondary Store**
-- Non-deterministic addresses, deletable when empty
-- Unlimited number can be created
-- Used mainly for assets managed by smart contracts
-- Creation: `create_store<T: key>(constructor_ref, metadata)`
+## Primary vs. Secondary Stores
 
+### Primary Store
+- Each account has exactly **one primary store** per fungible asset type
+- Created automatically when tokens are first received
+- Has a deterministic address (predictable based on owner address and token metadata)
+- Cannot be deleted (always available)
+- Most users will only ever interact with their primary store
+
+### Secondary Store
+- An account can have **multiple secondary stores** for the same asset type
+- Must be explicitly created (not automatic)
+- Has a non-deterministic address (created wherever you specify)
+- Can be deleted when empty
+- Used primarily for advanced use cases
+
+## Why Use Secondary Stores?
+
+Secondary stores are useful in several scenarios:
+
+1. **Smart Contract-Managed Assets**: When a contract needs to manage multiple distinct pools of the same token
+
+2. **Escrow and Vesting**: Holding tokens in separate buckets with different withdrawal rules
+
+3. **Protocol-Owned Liquidity**: When a protocol needs to segregate funds for different purposes
+
+4. **Complex DeFi Applications**: Like lending protocols that need to track supplied vs. borrowed tokens separately
+
+5. **Delegation**: When you want to allow another entity to manage some (but not all) of your tokens
+
+## How to Create a Secondary Store
+
+Creating a secondary store requires creating an object to own the store:
+
+```move
+// First create an object to own your secondary store
+let constructor_ref = object::create_object(owner);
+
+// Then create a fungible store owned by this object
+let store = fungible_asset::create_store(
+    &constructor_ref, 
+    metadata_object
+);
+```
+
+## Example Use Case: A Simple Escrow
+
+Here's a simplified example showing how secondary stores might be used in an escrow:
+
+## Key Points About Secondary Stores
+
+1. **Ownership Structure**: Secondary stores are owned by objects, not directly by accounts. This allows for more complex ownership patterns.
+
+2. **Lifecycle Management**: Unlike primary stores, secondary stores can be deleted when empty, which helps manage blockchain storage.
+
+3. **Addressing Challenge**: The non-deterministic nature of secondary store addresses means your contract needs to track and manage these addresses.
+
+4. **Access Control**: You need to maintain the appropriate permissions (through ExtendRef and object signers) to interact with secondary stores.
+
+5. **Use Cases**: Secondary stores shine in use cases where you need isolation of funds or more complex token management:
+   - Staking pools
+   - Escrow services
+   - Liquidity pools
+   - Token vesting contracts
+   - Multi-signature wallets
+
+## Practical Differences
+
+Here's a practical comparison:
+
+| Feature | Primary Store | Secondary Store |
+|---------|--------------|----------------|
+| Creation | Automatic | Manual |
+| Address | Deterministic | Non-deterministic |
+| Quantity | One per token type | Unlimited |
+| Deletion | Not possible | Possible when empty |
+| Typical use | Personal wallets | Smart contracts |
+| Access | Direct via account | Via object with ExtendRef |
+
+## When to Use Which Store Type
+
+- **Use Primary Store** for: Regular user balances, simple token transfers, basic token operations
+- **Use Secondary Store** for: Protocol-owned liquidity, escrow services, complex DeFi applications, fund isolation
+
+In most cases, regular users will only ever interact with their primary stores, while secondary stores are more commonly used within smart contracts for advanced token management scenarios.
 ## Migration from Coin to FA
 
 - No modifications needed for contracts using coin module
@@ -430,6 +505,180 @@ public fun get_total_balance<CoinType>(user: address): u64 {
     coin_balance + fa_balance
 }
 ```
+# Deep Dive: Comparing Fungible Asset Withdrawal Methods
+
+Let's thoroughly analyze the differences between these two withdrawal approaches:
+
+```move
+let fa = fungible_asset::withdraw(&escrow_signer, escrow.token_metadata, amount);
+```
+
+versus 
+
+```move
+let fa = primary_fungible_store::withdraw(owner, token_metadata, amount);
+```
+
+## Fundamental Differences
+
+### 1. Module Namespace & Function Location
+
+- **fungible_asset::withdraw**: Operates directly on any FungibleStore (primary or secondary)
+- **primary_fungible_store::withdraw**: Specifically targets only primary stores (a convenience wrapper)
+
+### 2. Parameter Types & Signatures
+
+Let's look at the actual function signatures (simplified):
+
+```move
+// fungible_asset.move
+public fun withdraw<T>(
+    owner: &signer,
+    metadata: Object<T>,
+    amount: u64
+): FungibleAsset
+
+// primary_fungible_store.move
+public fun withdraw<T>(
+    owner: &signer,
+    metadata: Object<T>,
+    amount: u64
+): FungibleAsset
+```
+
+While they initially appear similar, they operate very differently:
+
+### 3. Store Location & Derivation
+
+- **fungible_asset::withdraw**: 
+  - Requires the signer to be the direct owner of the specific FungibleStore (which could be any store)
+  - Operates on any arbitrary store for which you have the signer
+  
+- **primary_fungible_store::withdraw**: 
+  - Automatically determines the primary store address using a deterministic formula
+  - Works only with the one primary store associated with an owner-metadata pair
+  - Formula: `sha3_256(32-byte account address | 32-byte metadata object address | 0xFC)`
+
+### 4. Store Creation & Management
+
+- **fungible_asset::withdraw**: 
+  - Assumes the store already exists
+  - Doesn't handle store creation
+
+- **primary_fungible_store::withdraw**:
+  - May auto-create the primary store if it doesn't exist (in some implementations)
+  - Manages the "one primary store per account per token" constraint
+
+### 5. Underlying Implementation
+
+When you call `primary_fungible_store::withdraw`, it:
+
+1. Calculates the deterministic address of your primary store
+2. Creates it if needed (depending on implementation)
+3. Ultimately calls `fungible_asset::withdraw` under the hood
+
+The `fungible_asset::withdraw` function is more primitive and expects you to:
+
+1. Know exactly which store you're targeting
+2. Have the appropriate permissions (signer) for that specific store
+
+## Practical Implications
+
+### For the Escrow Example
+
+```move
+// Using direct fungible_asset::withdraw with a secondary store
+let fa = fungible_asset::withdraw(&escrow_signer, escrow.token_metadata, amount);
+```
+
+Here:
+- `escrow_signer` is generated from the ExtendRef, allowing the escrow object to act as a signer
+- This withdrawal occurs from the secondary store owned by the escrow object
+- We're directly accessing a specific store at a non-deterministic address
+
+```move
+// Using primary_fungible_store::withdraw
+let fa = primary_fungible_store::withdraw(owner, token_metadata, amount);
+```
+
+Here:
+- `owner` is the user's signer
+- This withdrawal happens from the owner's primary store for this token
+- We don't need to know the store's address - it's derived automatically
+
+### Implementation Deep Dive
+
+Let's examine how these might be implemented (simplified):
+
+```move
+// How primary_fungible_store::withdraw likely works under the hood
+public fun withdraw<T: key>(owner: &signer, metadata: Object<T>, amount: u64): FungibleAsset {
+    let owner_addr = signer::address_of(owner);
+    
+    // Calculate the deterministic address of the primary store
+    let store_addr = calculate_primary_store_address(owner_addr, object::object_address(&metadata));
+    
+    // Get or create the store
+    if (!exists<FungibleStore>(store_addr)) {
+        create_primary_store(owner_addr, metadata);
+    }
+    
+    // Get a reference to the store
+    let store = object::address_to_object<FungibleStore>(store_addr);
+    
+    // Now call the base withdraw function
+    fungible_asset::withdraw_internal(owner, store, amount)
+}
+
+// How fungible_asset::withdraw might work
+public fun withdraw<T: key>(owner: &signer, metadata: Object<T>, amount: u64): FungibleAsset {
+    let owner_addr = signer::address_of(owner);
+    
+    // You must provide the correct signer that directly owns the store
+    // No automatic derivation of which store to use
+    let store = get_fungible_store(owner_addr, metadata);
+    
+    // Direct withdrawal from the specified store
+    withdraw_internal(owner, store, amount)
+}
+```
+
+## Critical Differences in Use Cases
+
+### When to Use `fungible_asset::withdraw`:
+
+1. **Smart Contract Architectures**: When you need a contract to control funds in a store it owns
+2. **Complex Store Management**: When managing multiple stores for the same token
+3. **Custom Permission Models**: When implementing custom withdrawal permissions
+4. **Protocol-Owned Liquidity**: When a protocol needs direct control over its funds
+5. **When Working with Object Signers**: Like in the escrow example where the store is owned by an object
+
+### When to Use `primary_fungible_store::withdraw`:
+
+1. **User Wallets**: For standard user operations with their own tokens
+2. **Simplified Applications**: When you only need the default primary store behavior
+3. **User Interactions**: When users are directly signing transactions to withdraw their tokens
+4. **Single Store per Token**: When you follow the simple one-store-per-token model
+5. **When Working with User Signers**: Like in standard token transfers where users move their own tokens
+
+## Security Implications
+
+The distinction also has security implications:
+
+- **fungible_asset::withdraw** requires precise control over signers and store addresses, introducing more potential for errors if mismanaged
+- **primary_fungible_store::withdraw** has built-in safeguards as it only accesses the primary store of the signing account
+
+## Real-World Context
+
+In production DeFi applications:
+
+- **DEXes** often use secondary stores to manage liquidity pools
+- **Lending protocols** might use secondary stores to segregate collateral from borrowed assets
+- **User wallets** typically interact only with primary stores
+- **DAO treasuries** might use secondary stores to isolate funds for different purposes
+
+By understanding these nuances, you can make architectural decisions that best suit your application's needs while maintaining security and clarity in your token management approach.
+
 
 ## Security Best Practices
 
@@ -790,3 +1039,133 @@ This distinction is crucial for building applications on Aptos:
 - `fungible_asset` gives you direct control but requires more parameters
 - `primary_fungible_store` simplifies common operations by handling store management automatically
 
+
+## Why Store the Refs?
+
+When you create a fungible asset, the references (mint_ref, transfer_ref, burn_ref) are critical because they contain the permissions to control your token. These refs are essentially your "admin keys" that let you:
+
+1. **Mint new tokens** (using mint_ref)
+2. **Freeze/unfreeze transfers** (using transfer_ref)
+3. **Burn tokens** (using burn_ref)
+
+### If You Don't Store Them:
+
+If you generate these refs but don't store them anywhere, they'll be **destroyed at the end of the transaction**. This would mean:
+
+- You could never mint more tokens after initialization
+- You could never burn tokens
+- You could never use the transfer control features
+
+Essentially, your token would still exist, but you'd lose all administrative control over it.
+
+### How Storage Works:
+
+In the complete example I provided, the refs are stored in a resource called `AdminCapability`:
+
+```move
+// Struct to hold admin capabilities
+struct AdminCapability has key {
+    mint_ref: MintRef,
+    burn_ref: BurnRef,
+    transfer_ref: TransferRef,
+    extend_ref: ExtendRef,
+}
+
+// Later in the code...
+// 5. Store admin capabilities
+move_to(admin, AdminCapability {
+    mint_ref,
+    burn_ref,
+    transfer_ref,
+    extend_ref,
+});
+```
+
+This creates a resource at the admin's address that contains all the refs. Then, when you want to perform admin actions like minting, you access these stored refs:
+
+```move
+// In the mint function
+let admin_cap = borrow_global<AdminCapability>(admin_addr);
+let fa = fungible_asset::mint(&admin_cap.mint_ref, amount);
+```
+
+## Use Cases for Different Storage Approaches:
+
+1. **Store on admin account**: Most straightforward - the account that deploys the contract holds all admin powers.
+
+2. **Store in a multi-sig account**: For projects requiring multiple approvals for minting/burning.
+
+3. **Store partially**: You might choose to only store the mint_ref but destroy the burn_ref if you want tokens that can never be burned.
+
+4. **Destroy all refs**: In rare cases, you might want a fixed supply token where no one (not even you) can change the supply - then you'd intentionally not store the refs.
+
+5. **Store in smart contract**: For advanced use cases, you might store the refs in a smart contract that controls when and how tokens are minted/burned based on code logic rather than direct human action.
+
+Great follow-up question! The `extend_ref: ExtendRef` is a bit more advanced but very useful for certain token scenarios. Let me explain:
+
+## Why You Need an ExtendRef
+
+The `ExtendRef` allows you to "extend" your Move Object with additional functionality and resources after it's been created. This is different from the token-specific refs (mint_ref, burn_ref, transfer_ref).
+
+### Key Use Cases for ExtendRef:
+
+1. **Adding Custom Properties Later**
+   
+   If you want to add new features or properties to your token's metadata object after it's created, you need the ExtendRef. For example, you might want to add:
+   - New token attributes
+   - Additional functionality
+   - Integration with other protocols
+
+2. **Creating a Signer from an Object**
+
+   The ExtendRef allows you to generate a "signer" for your object, which means the object itself can perform actions as if it were an account. This is powerful for:
+   - Having an object (like your token metadata) control resources
+   - Creating autonomous objects that can manage their own state
+   - Building more complex DeFi applications where the token itself has agency
+
+3. **Managing Secondary Stores**
+
+   For advanced use cases where your token needs to manage multiple fungible stores:
+   - The object might need to act as its own entity
+   - Control resources at its own address
+   - Manage secondary stores that it owns
+
+4. **Upgradeability**
+
+   For projects that might need to evolve over time:
+   - Add new features to your token
+   - Update token behavior within the constraints of Move
+   - Integrate with new standards that emerge
+
+### Example Use of ExtendRef
+
+Here's a simple example of how you might use the ExtendRef:
+
+```move
+// Adding a new feature to your token later
+public entry fun add_feature(admin: &signer) acquires AdminCapability {
+    let admin_addr = signer::address_of(admin);
+    let admin_cap = borrow_global<AdminCapability>(admin_addr);
+    
+    // Generate a signer for the object using extend_ref
+    let metadata_signer = object::generate_signer_for_extending(&admin_cap.extend_ref);
+    
+    // Now you can add resources to the metadata object
+    // For example, adding a new feature like staking capabilities
+    move_to(&metadata_signer, NewFeature { ... });
+}
+```
+
+### When You Might Not Need ExtendRef
+
+You might not need to store the ExtendRef if:
+
+1. Your token is completely immutable after creation
+2. You have no plans to add new features or capabilities
+3. Your token doesn't need to interact with other protocols in complex ways
+
+However, even in these cases, it's often good practice to store it anyway. Having it available gives you flexibility for the future without any real downsides.
+
+### In Summary
+
+The ExtendRef provides future-proofing and flexibility to your token. While the MintRef, BurnRef, and TransferRef control the core token functions, the ExtendRef allows your token to evolve and adapt over time. This is particularly important in blockchain development where future use cases may emerge that weren't initially planned for.
