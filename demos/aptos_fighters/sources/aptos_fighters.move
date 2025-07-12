@@ -1,26 +1,25 @@
 module aptos_fighters_address::aptos_fighters {
-    use std::error;
+ use std::error;
     use std::signer;
-    use std::string::{Self, String};
     use std::vector;
     use aptos_std::string_utils;
     use std::bcs;
-    use aptos_framework::object::{Self, Object, LinearTransferRef, TransferRef};
-    use aptos_framework::fungible_asset::{Self, Metadata};
+    use aptos_framework::object::{Self};
+    use aptos_framework::fungible_asset::{Metadata};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::timestamp;
     use aptos_framework::event;
-    use aptos_framework::coin;
-    use aptos_token::token::{Self, Token};
-    use pyth::pyth;
-    use pyth::price_identifier;
-    use pyth::i64;
-    use pyth::price::{Self,Price};
-
-    use aptos_std::math64::pow;
     use aptos_framework::account;
+    
     #[test_only]
     use std::debug;
+    // use pyth::pyth;
+    // use pyth::price_identifier;
+    // use pyth::i64;
+    // use pyth::price::{Self,Price};
+
+    use aptos_std::math64::pow;
+
 
     const ASSET1_DEFAULT_BALANCE:u64=10000000;
     const ASSET2_DEFAULT_BALANCE:u64=1000000000000;
@@ -270,13 +269,15 @@ module aptos_fighters_address::aptos_fighters {
         };
 // Fetch current apt price
         
-                let price = fetch_price(game.data_feed);
-        let price_positive = i64::get_magnitude_if_positive(&price::get_price(&price)); // This will fail if the price is negative
-        let expo_magnitude = i64::get_magnitude_if_negative(&price::get_expo(&price));         // This will fail if the exponent is positive
+        //         let price = fetch_price(game.data_feed);
+        // let price_positive = i64::get_magnitude_if_positive(&price::get_price(&price)); // This will fail if the price is negative
+        // let expo_magnitude = i64::get_magnitude_if_negative(&price::get_expo(&price));         // This will fail if the exponent is positive
 
-        let price_in_aptos_coin =  (OCTAS_PER_APTOS * pow(10, expo_magnitude)) / price_positive; // 1 USD in APT        
+        // let price_in_aptos_coin =  (OCTAS_PER_APTOS * pow(10, expo_magnitude)) / price_positive; // 1 USD in APT        
         // Calculate cost
-        let cost = price_in_aptos_coin * amount;
+        // let cost = price_in_aptos_coin * amount;
+        let price = fetch_price(game.data_feed);
+        let cost = price * amount;
                 // Check player has sufficient balance
         let asset2_balance = get_user_asset_balance_mut(&mut game.user_asset2_balance,player_add);
         assert!(asset2_balance.balance >= cost, EINSUFFICIENT_BALANCE);
@@ -289,7 +290,7 @@ module aptos_fighters_address::aptos_fighters {
             // emit event 
         event::emit(AssetTraded{
             player: player_add,
-            price: price_in_aptos_coin,
+            price: cost,
             asset_amount: amount,
             is_buy: true,
         });
@@ -314,12 +315,13 @@ module aptos_fighters_address::aptos_fighters {
         };
         
         let price = fetch_price(game.data_feed);
-        let price_positive = i64::get_magnitude_if_positive(&price::get_price(&price)); // This will fail if the price is negative
-        let expo_magnitude = i64::get_magnitude_if_negative(&price::get_expo(&price)); // This will fail if the exponent is positive
+        // let price_positive = i64::get_magnitude_if_positive(&price::get_price(&price)); // This will fail if the price is negative
+        // let expo_magnitude = i64::get_magnitude_if_negative(&price::get_expo(&price)); // This will fail if the exponent is positive
 
-        let price_in_aptos_coin =  (OCTAS_PER_APTOS * pow(10, expo_magnitude)) / price_positive; // 1 USD in APT
+        // let price_in_aptos_coin =  (OCTAS_PER_APTOS * pow(10, expo_magnitude)) / price_positive; // 1 USD in APT
             // Calculate cost
-            let cost = price_in_aptos_coin * amount;
+            // let cost = price_in_aptos_coin * amount;
+            let cost = price * amount;
             // Check player has sufficient balance
              let asset1_balance = get_user_asset_balance_mut(&mut game.user_asset1_balance,player_add);
 
@@ -333,7 +335,7 @@ module aptos_fighters_address::aptos_fighters {
             // emit event 
         event::emit(AssetTraded{
             player: player_add,
-            price: price_in_aptos_coin,
+            price: cost,
             asset_amount: amount,
             is_buy: false,
         });
@@ -426,16 +428,22 @@ module aptos_fighters_address::aptos_fighters {
         // Transfer tokens from player to the contract
         primary_fungible_store::transfer(player, metadata, module_addr, amount);
     }
+
+// using chainlink priceffeds 
+ fun  fetch_price(asset_price_identifier : vector<u8>):u64{
+    2
+ }
+
 // @dev @notice @todo : we should update the price , but this would require paying for this in aptos coin, we are just skipping this for now , will do it later 
-fun fetch_price(asset_price_identifier : vector<u8>) :  Price{
-     // Read the current price from a price feed.
-        // Each price feed (e.g., BTC/USD) is identified by a price feed ID.
-        // The complete list of feed IDs is available at https://pyth.network/developers/price-feed-ids
-        // Note: Aptos uses the Pyth price feed ID without the `0x` prefix.
-        // let btc_price_identifier = x"e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
-        let btc_usd_price_id = price_identifier::from_byte_vec(asset_price_identifier);
-        pyth::get_price(btc_usd_price_id)
-    }
+// fun fetch_price(asset_price_identifier : vector<u8>) :  Price{
+//      // Read the current price from a price feed.
+//         // Each price feed (e.g., BTC/USD) is identified by a price feed ID.
+//         // The complete list of feed IDs is available at https://pyth.network/developers/price-feed-ids
+//         // Note: Aptos uses the Pyth price feed ID without the `0x` prefix.
+//         // let btc_price_identifier = x"e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
+//         let btc_usd_price_id = price_identifier::from_byte_vec(asset_price_identifier);
+//         pyth::get_price(btc_usd_price_id)
+//     }
   /// Please read https://docs.pyth.network/documentation/pythnet-price-feeds before using a `Price` in your application
     // fun update_and_fetch_price(receiver : &signer,  vaas : vector<vector<u8>>) : Price {
     //         let coins = coin::withdraw<aptos_coin::AptosCoin>(receiver, pyth::get_update_fee(&vaas)); // Get coins to pay for the update

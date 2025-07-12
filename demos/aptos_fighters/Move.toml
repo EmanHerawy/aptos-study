@@ -4,20 +4,28 @@ version = "1.0.0"
 authors = []
 
 [addresses]
-pyth = "_"
+sender = "_"
+owner = "_"
+data_feeds = "_"
+platform = "_"
+# move_stdlib = "_"
+# aptos_std = "_"
 aptos_fighters_address = "_"
-deployer = "_"
-wormhole = "_"
 
 [dev-addresses]
 aptos_fighters_address = "0x456"
-pyth = "0x7e783b349d3e89cf5931af376ebeadbfab855b3fa239b7ada8f5a92fbea6b387"
-deployer = "0xb31e712b26fd295357355f6845e77c888298636609e93bc9b05f0f604049f434"
-wormhole = "0x5bc11445584a763c1fa7ed39081f1b920954da14e04b32440cba863d03e19625"
+sender = "0x12a404c986159b0c3c1021949b1e1038084af231a2cc4fac32b0b33278b7eda4"
+owner = "0x123"
+data_feeds = "0xf1099f135ddddad1c065203431be328a408b0ca452ada70374ce26bd2b32fdd3"
+platform = "0x516e771e1b4a903afe74c27d057c65849ecc1383782f6642d7ff21425f4f9c99"
+# Remove these two lines - they conflict with framework dependencies:
+# move_stdlib = "0x10"
+# aptos_std = "0x1"
 
 [dependencies]
-Pyth = { git = "https://github.com/pyth-network/pyth-crosschain.git", subdir = "target_chains/aptos/contracts", rev = "main" }
-AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "6f83bc6d02207298b2dee91133d75538789bf582" }
-
+# Use the main branch (correct syntax)
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "main" }
+MoveStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/move-stdlib", rev = "main" }
+ChainlinkDataFeeds = { local = "./ChainlinkDataFeeds" }
 
 [dev-dependencies]
