@@ -81,98 +81,113 @@ Resource Lifecycle:
 
 ---
 
-## Resource Ownership & Cross-Module Transfer
 
-Move's ownership model ensures secure and controlled resource transfers:
+## Resource Lifecycle
 
-### Ownership Rules
+Understanding the complete lifecycle of resources is crucial for proper Move development:
 
-Each type T must be declared in the current module. This ensures that a resource can only be manipulated via the API exposed by its defining module.
+### Resource State Transitions
 
 ```
-Ownership Control Flow:
+Resource Lifecycle State Machine:
 ┌─────────────────────────────────────────────────────────────┐
-│                   MODULE AUTHORITY                          │
 │                                                             │
-│ module 0x42::bank {                                         │
-│   struct Account has key {                                  │
-│     balance: u64                                            │
-│   }                                                         │
+│  ┌──────────────┐    create/pack     ┌──────────────┐       │
+│  │   NOT        │ ─────────────────▶ │   CREATED    │       │
+│  │  CREATED     │                    │  (in memory) │       │
+│  │              │                    │              │       │
+│  └──────────────┘                    └──────┬───────┘       │
+│                                             │               │
+│                                    move_to  │               │
+│                                             ▼               │
+│  ┌──────────────┐                    ┌──────────────┐       │
+│  │  DESTROYED   │                    │    STORED    │       │
+│  │ (unpacked)   │                    │ (in global)  │       │
+│  │              │                    │              │       │
+│  └──────▲───────┘                    └──────┬───────┘       │
+│         │                                   │               │
+│         │ unpack/destroy                    │ move_from     │
+│         │                                   ▼               │
+│  ┌──────────────┐   ◀───────────────  ┌──────────────┐       │
+│  │   REMOVED    │                     │   BORROWED   │       │
+│  │ (in memory)  │                     │ (referenced) │       │
+│  │              │                     │              │       │
+│  └──────────────┘                     └──────────────┘       │
 │                                                             │
-│   ✅ CAN DO:                                                │
-│   • move_to<Account>(&signer, account)                     │
-│   • borrow_global<Account>(address)                        │
-│   • move_from<Account>(address)                            │
-│   • Modify account.balance through references              │
-│                                                             │
-│   ❌ CANNOT DO (from other modules):                        │
-│   • Direct global storage operations on Account            │
-│   • Create Account instances outside this module           │
-│   • Access private fields directly                         │
-│ }                                                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Cross-Module Transfer Pattern
+### Detailed Lifecycle Operations
 
 ```
-Safe Cross-Module Transfer:
+Resource Lifecycle with Examples:
 ┌─────────────────────────────────────────────────────────────┐
-│ module 0x42::token {                                        │
-│   struct Token has store {                                  │
-│     value: u64                                              │
-│   }                                                         │
+│ 1. CREATION PHASE                                           │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ let coin = Coin { value: 100 };                        │ │
+│ │ // Resource exists in local memory                     │ │
+│ │ // Must be explicitly handled before function ends    │ │
+│ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
-│   public fun create(value: u64): Token {                   │
-│     Token { value }                                         │
-│   }                                                         │
+│ 2. STORAGE PHASE                                            │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ move_to<CoinStore>(&signer, CoinStore { coin });       │ │
+│ │ // Resource now in global storage                      │ │
+│ │ // Accessible via borrow_global operations             │ │
+│ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
-│   public fun transfer(token: Token, to: &signer) {         │
-│     // Token ownership transferred to this function        │
-│     // Module controls transfer logic                      │
-│     move_to(to, token);                                     │
-│   }                                                         │
-│ }                                                           │
+│ 3. ACCESS PHASE                                             │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ // Read-only access                                    │ │
+│ │ let store_ref = borrow_global<CoinStore>(address);     │ │
+│ │ let balance = store_ref.coin.value;                    │ │
+│ │                                                         │ │
+│ │ // Mutable access                                      │ │
+│ │ let store_mut = borrow_global_mut<CoinStore>(address); │ │
+│ │ store_mut.coin.value = store_mut.coin.value + 50;     │ │
+│ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
-│ module 0x43::exchange {                                     │
-│   use 0x42::token;                                          │
+│ 4. REMOVAL PHASE                                            │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ let CoinStore { coin } = move_from<CoinStore>(address); │ │
+│ │ // Resource removed from global storage                │ │
+│ │ // Now exists in local memory again                    │ │
+│ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
-│   public fun trade(user: &signer, amount: u64) {           │
-│     let token = token::create(amount);  // Get token        │
-│     token::transfer(token, user);       // Transfer safely │
-│   }                                                         │
-│ }                                                           │
+│ 5. DESTRUCTION PHASE                                        │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ let Coin { value } = coin;                             │ │
+│ │ // Resource unpacked and destroyed                     │ │
+│ │ // Individual fields can be used or dropped            │ │
+│ └─────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Resource Ownership vs Module Authority
+### Resource Safety Guarantees
 
 ```
-Authority Layers:
+Move's Resource Safety Rules:
 ┌─────────────────────────────────────────────────────────────┐
-│                     AUTHORITY HIERARCHY                     │
+│ SAFETY GUARANTEE #1: No Resource Duplication               │
+│ • Resources cannot be copied (unless has copy ability)     │
+│ • Move semantics ensure single ownership                   │
+│ • Prevents double-spending and resource inflation          │
 │                                                             │
-│ Level 1: Account Ownership                                  │
-│ ├─ Account controls: Which resources stored at address     │
-│ ├─ Signer authority: Who can modify account resources      │
-│ └─ Private key: Ultimate control over account              │
+│ SAFETY GUARANTEE #2: No Resource Loss                      │
+│ • Resources cannot be dropped (unless has drop ability)   │
+│ • Must be explicitly handled in all code paths            │
+│ • Prevents accidental resource destruction                 │
 │                                                             │
-│ Level 2: Module Authority                                   │
-│ ├─ Module controls: How resources are created/destroyed    │
-│ ├─ Public API: Which operations are allowed                │
-│ └─ Business logic: What state transitions are valid        │
+│ SAFETY GUARANTEE #3: Reference Safety                      │
+│ • Cannot return references to global storage               │
+│ • Prevents dangling references after resource removal     │
+│ • Acquires annotation prevents concurrent access issues    │
 │                                                             │
-│ Level 3: Type System Authority                              │
-│ ├─ Abilities control: What operations are possible         │
-│ ├─ Reference safety: Prevents dangling references          │
-│ └─ Resource safety: Prevents duplication/loss              │
-│                                                             │
-│ Level 4: VM Authority                                       │
-│ ├─ Bytecode verification: Ensures type safety              │
-│ ├─ Gas metering: Prevents infinite loops                   │
-│ └─ Execution isolation: Prevents cross-transaction issues  │
+│ SAFETY GUARANTEE #4: Module Authority                      │
+│ • Only defining module can directly manipulate resources   │
+│ • Public API controls all external access                 │
+│ • Prevents unauthorized resource modification              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
-

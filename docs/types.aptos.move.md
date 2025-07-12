@@ -79,6 +79,7 @@ Move Type System
 ```
 
 DETAILED TYPE CHARACTERISTICS:
+```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                              PRIMITIVE TYPES                                       │
 ├─────────────┬─────────────┬─────────────┬─────────────┬────────────────────────────┤
@@ -112,8 +113,9 @@ DETAILED TYPE CHARACTERISTICS:
 │             │             │(no copy,    │             │                            │
 │             │             │no store)    │             │                            │
 └─────────────┴─────────────┴─────────────┴─────────────┴────────────────────────────┘
-
+```
 REFERENCE TYPE DETAILS:
+```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                              REFERENCE TYPES                                       │
 ├─────────────────┬─────────────────┬─────────────────┬─────────────────────────────┤
@@ -162,7 +164,7 @@ Operations:
 • Bitwise: &, |, ^, <<, >>
 • Casting: as (between integer types)
 • Abilities: copy, drop, store
-```
+
 
 
 Boolean Type:
@@ -170,10 +172,7 @@ Boolean Type:
 • Operations: &&, ||, !, ==, !=
 • Abilities: copy, drop, store
 • Common in conditional expressions and assertions
-```
 
-**Address**
-```
 Address Type:
 • Size: 32 bytes (256 bits)
 • Format: 0x followed by 64 hex characters
@@ -209,6 +208,7 @@ Signer Type:
 ```
 
 **Vector<T>**
+
 vector<T> is the only primitive collection type provided by Move. A vector<T> is a homogenous collection of T's that can grow or shrink by pushing/popping values off the "end".
 
 ```
@@ -748,8 +748,9 @@ STRUCT DEFINITION:
 │ struct EUR {}                                                                       │
 │ struct BTC {}                                                                       │
 └─────────────────────────────────────────────────────────────────────────────────────┘
-
+```
 COMPILE TIME (Type Checking):
+```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │ Coin<USD>  ←→  Different Type  ←→  Coin<EUR>  ←→  Different Type  ←→  Coin<BTC>   │
 │ │                                 │                                 │              │
@@ -761,8 +762,9 @@ COMPILE TIME (Type Checking):
 │ ├─ Cannot store Coin<BTC> in Coin<USD> variable                                   │
 │ └─ Cannot mix different currency types                                             │
 └─────────────────────────────────────────────────────────────────────────────────────┘
-
+```
 RUNTIME (Actual Memory):
+```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │ Coin<USD>: [100]  ←  Only 8 bytes (u64)                                           │
 │ Coin<EUR>: [85]   ←  Only 8 bytes (u64)                                           │
@@ -774,6 +776,7 @@ RUNTIME (Actual Memory):
 ```
 ## What Are Tuples in Move?
 Move has a **limited** tuple system that's quite different from traditional languages:
+```
 ┌─────────────────────────────────────────────────────────────┐
 │                    MOVE TUPLES - KEY FACTS                  │
 │                                                             │
@@ -784,9 +787,10 @@ Move has a **limited** tuple system that's quite different from traditional lang
 │ ✅ Used ONLY for multiple return values                    │
 │ ✅ Exist only at compile time                              │
 └─────────────────────────────────────────────────────────────┘
+```
 
 ### Tuple Limitations Visualized
-
+```
 ┌─────────────────────────────────────────────────────────────┐
 │                    WHAT YOU CANNOT DO                       │
 │                                                             │
@@ -807,4 +811,4 @@ Move has a **limited** tuple system that's quite different from traditional lang
 │ ✅ ONLY use for multiple returns:                          │
 │    fun get_data(): (u64, bool) { (42, true) }              │
 └─────────────────────────────────────────────────────────────┘
----
+```

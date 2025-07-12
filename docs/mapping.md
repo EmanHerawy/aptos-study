@@ -1,5 +1,268 @@
  There are several data structure options in Aptos Move for implementing mappings, each with different trade-offs. Let me break down the key differences:
 
+### 2. Table Storage Ecosystem
+
+Move provides several table-based storage solutions, with SmartTable deprecated in favor of BigOrderedMap for better performance and features.
+
+## **Complete Table Storage Architecture**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                        MOVE TABLE STORAGE EVOLUTION                                │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+DEPRECATED COLLECTIONS:
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ ❌ SimpleMap    → Replaced with OrderedMap                                          │
+│ ❌ SmartTable   → Replaced with BigOrderedMap                                       │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+CURRENT TABLE ECOSYSTEM:
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     │
+│ ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐          │
+│ │    Table    │    │Table w/Len  │    │ OrderedMap  │    │BigOrderedMap│          │
+│ │             │    │             │    │             │    │             │          │
+│ │• Basic K/V  │    │• With length│    │• Sorted     │    │• B+ Tree    │          │
+│ │• Separate   │    │• tracking   │    │• Single     │    │• Multi-slot │          │
+│ │  storage    │    │             │    │  resource   │    │• Scalable   │          │
+│ │• Native     │    │             │    │• Vector-    │    │• Parallel   │          │
+│ │  functions  │    │             │    │  based      │    │  execution  │          │
+│ └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘          │
+│        │                  │                  │                  │                │
+│        ▼                  ▼                  ▼                  ▼                │
+│ Each item is      Adds counter     Stored within    Spans multiple              │
+│ separate global   for efficiency   parent resource  resources as               │
+│ state item                         (limited size)   needed                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+DETAILED STORAGE COMPARISON:
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                              TABLE STORAGE                                         │
+├─────────────┬─────────────┬─────────────┬─────────────┬────────────────────────────┤
+│    TYPE     │  STORAGE    │   SIZE      │ PARALLELISM │        BEST FOR            │
+├─────────────┼─────────────┼─────────────┼─────────────┼────────────────────────────┤
+│   Table     │ Separate    │ Unlimited   │    Full     │ Large datasets, no         │
+│             │ items       │             │             │ ordering needed            │
+├─────────────┼─────────────┼─────────────┼─────────────┼────────────────────────────┤
+│TableWithLen │ Separate    │ Unlimited   │    Full     │ Table + count tracking     │
+│             │ items       │             │             │                            │
+├─────────────┼─────────────┼─────────────┼─────────────┼────────────────────────────┤
+│ OrderedMap  │ Single      │ Limited by  │   Limited   │ Small-medium sorted data   │
+│             │ resource    │ resource    │             │ (< 1000 items)            │
+├─────────────┼─────────────┼─────────────┼─────────────┼────────────────────────────┤
+│BigOrderedMap│ Multi-      │ Unlimited   │   Partial   │ Large sorted data,         │
+│             │ resource    │             │             │ complex queries            │
+└─────────────┴─────────────┴─────────────┴─────────────┴────────────────────────────┘
+
+BIGORDEREDMAP INTERNAL STRUCTURE:
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           B+ TREE IMPLEMENTATION                                   │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                              ROOT NODE                                             │
+│ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+│ │ Address: 0x123::BigOrderedMap                                                   │ │
+│ │ ┌─────────────────────────────────────────────────────────────────────────────┐ │ │
+│ │ │ TreeNode {                                                                  │ │ │
+│ │ │   keys: [100, 500, 1000],                                                  │ │ │
+│ │ │   children: [Child1, Child2, Child3, Child4],                              │ │ │
+│ │ │   is_leaf: false,                                                           │ │ │
+│ │ │   size: 4                                                                   │ │ │
+│ │ │ }                                                                           │ │ │
+│ │ └─────────────────────────────────────────────────────────────────────────────┘ │ │
+│ └─────────────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                             │
+│                 ┌────────────────────┼────────────────────┐                       │
+│                 │                    │                    │                       │
+│                 ▼                    ▼                    ▼                       │
+│ ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐     │
+│ │   LEAF NODE 1       │    │   LEAF NODE 2       │    │   LEAF NODE 3       │     │
+│ │ Address: 0x456...   │    │ Address: 0x789...   │    │ Address: 0xABC...   │     │
+│ │ ┌─────────────────┐ │    │ ┌─────────────────┐ │    │ ┌─────────────────┐ │     │
+│ │ │ Keys: [1,5,10]  │ │    │ │ Keys:[101,250]  │ │    │ │ Keys:[501,750]  │ │     │
+│ │ │ Values: [...]   │ │    │ │ Values: [...]   │ │    │ │ Values: [...]   │ │     │
+│ │ │ is_leaf: true   │ │    │ │ is_leaf: true   │ │    │ │ is_leaf: true   │ │     │
+│ │ └─────────────────┘ │    │ └─────────────────┘ │    │ └─────────────────┘ │     │
+│ └─────────────────────┘    └─────────────────────┘    └─────────────────────┘     │
+│                                                                                     │
+│ CHARACTERISTICS:                                                                   │
+│ ├─ inner_max_degree: Maximum children per inner node                              │
+│ ├─ leaf_max_degree: Maximum key-value pairs per leaf                              │
+│ ├─ Dynamic Growth: Splits nodes when they exceed capacity                         │
+│ └─ Efficient Range Queries: O(log n) + result size                               │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+PERFORMANCE COMPARISON (1M Elements):
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           OPERATION PERFORMANCE                                    │
+├─────────────────┬─────────────────┬─────────────────┬─────────────────────────────┤
+│   OPERATION     │   SmartTable    │  BigOrderedMap  │          NOTES              │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────────────────┤
+│ Insert          │ O(1) avg        │ O(log n)        │ BigOrderedMap more          │
+│                 │ O(n) worst      │                 │ predictable                 │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────────────────┤
+│ Lookup          │ O(1) avg        │ O(log n)        │ Similar for most sizes      │
+│                 │ O(n) worst      │                 │                             │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────────────────┤
+│ Range Query     │ Not supported   │ O(log n + k)    │ k = result size             │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────────────────┤
+│ Storage Eff.    │ Hash overhead   │ Tree structure  │ BigOrderedMap more          │
+│                 │                 │ only            │ storage efficient           │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────────────────┤
+│ Parallelism     │ Sequential only │ Partial support │ BigOrderedMap allows        │
+│                 │                 │                 │ some parallelism            │
+└─────────────────┴─────────────────┴─────────────────┴─────────────────────────────┘
+```
+
+### **Table Storage Code Examples:**
+
+```move
+module AdvancedStorage::TableExamples {
+    use aptos_std::table::{Self, Table};
+    use aptos_std::table_with_length::{Self, TableWithLength};
+    use aptos_std::ordered_map::{Self, OrderedMap};
+    use aptos_std::big_ordered_map::{Self, BigOrderedMap};
+    
+    struct UserRegistry has key {
+        // Basic table - separate storage items
+        user_profiles: Table<address, UserProfile>,
+        
+        // Table with length tracking
+        user_scores: TableWithLength<address, u64>,
+        
+        // Ordered map - sorted, single resource
+        leaderboard: OrderedMap<u64, address>, // score -> user
+        
+        // Big ordered map - scalable sorted storage
+        transaction_history: BigOrderedMap<u64, Transaction>, // timestamp -> tx
+    }
+    
+    struct UserProfile has store {
+        name: vector<u8>,
+        level: u64,
+        reputation: u64,
+    }
+    
+    struct Transaction has store {
+        from: address,
+        to: address,
+        amount: u64,
+        timestamp: u64,
+    }
+    
+    // Initialize all storage types
+    public fun create_registry(admin: &signer) {
+        move_to(admin, UserRegistry {
+            user_profiles: table::new(),
+            user_scores: table_with_length::new(),
+            leaderboard: ordered_map::new(),
+            transaction_history: big_ordered_map::new(),
+        });
+    }
+    
+    // Table operations
+    public fun register_user(
+        admin: &signer,
+        user_addr: address,
+        name: vector<u8>
+    ) acquires UserRegistry {
+        let registry = borrow_global_mut<UserRegistry>(signer::address_of(admin));
+        
+        // Add to table
+        table::add(&mut registry.user_profiles, user_addr, UserProfile {
+            name,
+            level: 1,
+            reputation: 0,
+        });
+        
+        // Add to table with length
+        table_with_length::add(&mut registry.user_scores, user_addr, 0);
+    }
+    
+    // OrderedMap operations (for small, sorted data)
+    public fun update_leaderboard(
+        admin: &signer,
+        user_addr: address,
+        new_score: u64
+    ) acquires UserRegistry {
+        let registry = borrow_global_mut<UserRegistry>(signer::address_of(admin));
+        
+        // Remove old score if exists
+        if (ordered_map::contains(&registry.leaderboard, &new_score)) {
+            ordered_map::remove(&mut registry.leaderboard, &new_score);
+        };
+        
+        // Add new score
+        ordered_map::add(&mut registry.leaderboard, new_score, user_addr);
+    }
+    
+    // BigOrderedMap operations (for large, sorted data)
+    public fun record_transaction(
+        admin: &signer,
+        from: address,
+        to: address,
+        amount: u64
+    ) acquires UserRegistry {
+        let registry = borrow_global_mut<UserRegistry>(signer::address_of(admin));
+        let timestamp = timestamp::now_seconds();
+        
+        big_ordered_map::add(&mut registry.transaction_history, timestamp, Transaction {
+            from,
+            to,
+            amount,
+            timestamp,
+        });
+    }
+    
+    // Range query with BigOrderedMap
+    public fun get_transactions_in_range(
+        registry_addr: address,
+        start_time: u64,
+        end_time: u64
+    ): vector<Transaction> acquires UserRegistry {
+        let registry = borrow_global<UserRegistry>(registry_addr);
+        let transactions = vector::empty<Transaction>();
+        
+        // Efficient range query
+        let iter = big_ordered_map::iter(&registry.transaction_history, 
+                                         option::some(start_time), 
+                                         option::some(end_time));
+        
+        while (big_ordered_map::iter_has_next(&iter)) {
+            let (_, tx) = big_ordered_map::iter_next(&mut iter);
+            vector::push_back(&mut transactions, *tx);
+        };
+        
+        transactions
+    }
+    
+    // Batch operations for efficiency
+    public fun batch_update_scores(
+        admin: &signer,
+        users: vector<address>,
+        scores: vector<u64>
+    ) acquires UserRegistry {
+        let registry = borrow_global_mut<UserRegistry>(signer::address_of(admin));
+        
+        // Single borrow for all operations
+        let i = 0;
+        let len = vector::length(&users);
+        while (i < len) {
+            let user = *vector::borrow(&users, i);
+            let score = *vector::borrow(&scores, i);
+            
+            if (table_with_length::contains(&registry.user_scores, user)) {
+                *table_with_length::borrow_mut(&mut registry.user_scores, user) = score;
+            } else {
+                table_with_length::add(&mut registry.user_scores, user, score);
+            };
+            
+            i = i + 1;
+        }
+    }
+}
+```
+
 ## 1. `table::Table`
 
 ```move

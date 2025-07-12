@@ -1,4 +1,15 @@
 # Ethereum vs. Aptos
+### What Makes Move Storage Different?
+
+Move storage is fundamentally different from Ethereum/Solidity. In Ethereum, state storage is centered around smart contract instances. In Move (on Aptos), storage is organized by accounts (addresses) rather than contract instances.
+
+**Key Differences:**
+
+| Ethereum/Solidity | Move/Aptos |
+|-------------------|------------|
+| Contract-centric storage | Account-centric storage |
+| Contract owns the data | Users own their data |
+| Single storage location | Distributed across accounts |
 
 ## High Level Overview
 
